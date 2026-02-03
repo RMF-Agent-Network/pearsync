@@ -192,6 +192,12 @@ async function cmdInit(localPath, flags) {
   try {
     const key = await engine.init()
     
+    // Do initial sync (local → remote) before closing
+    await engine.syncToRemote()
+    
+    // Close engine before moving storage
+    await engine.close()
+    
     // Move storage to correct location based on actual key
     const actualStoragePath = config.getStorePath(key)
     if (storagePath !== actualStoragePath) {
@@ -207,8 +213,15 @@ async function cmdInit(localPath, flags) {
       syncDeletes: flags.delete !== false
     })
     
-    // Do initial sync (local → remote)
-    await engine.syncToRemote()
+    // Reopen engine for seeding (use ownKey to open existing drive we created)
+    const seedEngine = new SyncEngine({
+      localPath: absPath,
+      storagePath: actualStoragePath,
+      ownKey: key,  // Reopen as writer
+      syncDeletes: flags.delete !== false
+    })
+    setupEventHandlers(seedEngine, flags.verbose)
+    await seedEngine.init()
     
     console.log('')
     console.log(`${colors.bright}${colors.green}✓ Workspace '${name}' created!${colors.reset}`)
@@ -224,11 +237,11 @@ async function cmdInit(localPath, flags) {
     logInfo('Seeding to network for 10 seconds (Ctrl+C to stop earlier)...')
     
     goodbye(async () => {
-      await engine.close()
+      await seedEngine.close()
     })
     
     await new Promise(resolve => setTimeout(resolve, 10000))
-    await engine.close()
+    await seedEngine.close()
     
   } catch (err) {
     logError(`Failed to initialize: ${err.message}`)
@@ -362,6 +375,7 @@ async function cmdWatch(name, flags) {
     localPath: workspace.path,
     storagePath,
     remoteKey: workspace.isWriter ? null : workspace.key,
+    ownKey: workspace.isWriter ? workspace.key : null,  // Reopen our own workspace
     syncDeletes: flags.delete !== false && workspace.syncDeletes
   })
   
@@ -424,7 +438,8 @@ async function cmdStatus(name, flags) {
   const engine = new SyncEngine({
     localPath: workspace.path,
     storagePath,
-    remoteKey: workspace.isWriter ? null : workspace.key
+    remoteKey: workspace.isWriter ? null : workspace.key,
+    ownKey: workspace.isWriter ? workspace.key : null
   })
   
   engine.on('error', () => {}) // Suppress errors for status
