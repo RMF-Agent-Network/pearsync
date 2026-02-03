@@ -1,0 +1,24 @@
+{
+  "name": "pearsync",
+  "version": "1.0.0",
+  "description": "P2P file sync - Dropbox but decentralized",
+  "type": "module",
+  "bin": {
+    "pearsync": "./bin/pearsync.js"
+  },
+  "scripts": {
+    "test": "echo \"TODO: add tests\" && exit 0"
+  },
+  "keywords": ["p2p", "sync", "holepunch", "hyperdrive"],
+  "author": "Hal",
+  "license": "MIT",
+  "dependencies": {
+    "hyperdrive": "^13.x",
+    "hyperswarm": "^4.x",
+    "corestore": "^7.x",
+    "localdrive": "^2.x",
+    "b4a": "^1.x",
+    "graceful-goodbye": "^1.x",
+    "debounceify": "^1.x"
+  }
+}
