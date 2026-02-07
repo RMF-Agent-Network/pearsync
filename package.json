@@ -34,7 +34,6 @@
   "devDependencies": {
     "brittle": "^3.19.1",
     "random-access-memory": "^6.2.1",
-    "testnet": "^1.0.0",
     "tmp-promise": "^3.0.3"
   }
 }

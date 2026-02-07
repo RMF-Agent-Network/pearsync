@@ -3,6 +3,7 @@ import os from 'os'
 import path from 'path'
 import fs from 'fs/promises'
 import net from 'net'
+import { spawn } from 'child_process'
 import { setTimeout as sleep } from 'timers/promises'
 import { Daemon } from '../../lib/daemon.js'
 import { DaemonClient } from '../../lib/daemon-client.js'
@@ -198,20 +199,76 @@ test('daemon - survives workspace errors without crashing', async (t) => {
 })
 
 test('daemon - graceful shutdown on SIGTERM', async (t) => {
-  const daemon = new Daemon(SOCKET_PATH)
+  const testSocketPath = path.join(os.tmpdir(), `pearsync-sigterm-test-${Date.now()}.sock`)
 
-  await daemon.start()
-  t.ok(daemon.isRunning(), 'daemon should be running')
+  // Create a child process that runs the daemon
+  const childScript = `
+    import { Daemon } from '${path.resolve('./lib/daemon.js')}'
+    const daemon = new Daemon('${testSocketPath}')
+    await daemon.start()
+    console.log('DAEMON_STARTED')
+    // Keep process alive until SIGTERM
+    await new Promise(() => {})
+  `
 
-  // Simulate SIGTERM
-  process.emit('SIGTERM')
+  const child = spawn('node', ['--input-type=module', '-e', childScript], {
+    stdio: ['pipe', 'pipe', 'pipe']
+  })
 
-  await sleep(100) // Give time for signal handler
+  let daemonStarted = false
 
-  // Daemon should handle cleanup
-  t.pass('daemon should handle SIGTERM without crashing')
+  // Wait for daemon to start
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Daemon failed to start in time'))
+    }, 5000)
 
-  await daemon.stop()
+    child.stdout.on('data', (data) => {
+      if (data.toString().includes('DAEMON_STARTED')) {
+        daemonStarted = true
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
+
+    child.stderr.on('data', (data) => {
+      console.error('Child stderr:', data.toString())
+    })
+
+    child.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  })
+
+  t.ok(daemonStarted, 'daemon should have started')
+
+  // Verify socket was created
+  const stats = await fs.stat(testSocketPath)
+  t.ok(stats.isSocket(), 'socket file should exist')
+
+  // Send SIGTERM to child process
+  child.kill('SIGTERM')
+
+  // Wait for graceful shutdown
+  const exitCode = await new Promise((resolve) => {
+    child.on('exit', (code, signal) => resolve({ code, signal }))
+  })
+
+  // Give a moment for cleanup to complete
+  await sleep(200)
+
+  // Process should exit with code 0, 130 (128 + SIGTERM=2), or be terminated by signal
+  // Exit code 130 is the standard exit code for a process terminated by SIGTERM
+  t.ok(
+    exitCode.code === 0 || exitCode.code === 130 || exitCode.code === null || exitCode.signal === 'SIGTERM',
+    `daemon should exit gracefully (got code: ${exitCode.code}, signal: ${exitCode.signal})`
+  )
+
+  // Verify socket was cleaned up
+  await t.exception(async () => {
+    await fs.stat(testSocketPath)
+  }, 'socket file should be removed after SIGTERM')
 })
 
 test('daemon - auto-cleanup of socket on exit', async (t) => {
