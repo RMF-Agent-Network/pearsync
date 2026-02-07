@@ -84,14 +84,14 @@ test('sync-v2: pulls file from autobase to local', async (t) => {
   await engine.init()
 
   // Manually add a file to autobase (simulating remote write)
+  // Use embedded content format (base64)
   const content = Buffer.from('Remote content!')
-  const blobId = await engine.autobase.putBlob(content)
 
   await engine.autobase.append({
     type: 'put',
     key: 'remote.txt',
     value: {
-      blobId,
+      content: content.toString('base64'),
       size: content.length,
       mtime: Date.now(),
       hash: 'fakehash'
