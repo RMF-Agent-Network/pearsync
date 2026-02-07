@@ -9,16 +9,30 @@
   "scripts": {
     "test": "echo \"TODO: add tests\" && exit 0"
   },
-  "keywords": ["p2p", "sync", "holepunch", "hyperdrive"],
+  "keywords": [
+    "p2p",
+    "sync",
+    "holepunch",
+    "hyperdrive"
+  ],
   "author": "Hal",
   "license": "MIT",
   "dependencies": {
+    "autobase": "^7.25.1",
+    "b4a": "^1.7.3",
+    "corestore": "^7.8.0",
+    "debounceify": "^1.x",
+    "graceful-goodbye": "^1.x",
+    "hyperbee": "^2.27.3",
+    "hyperblobs": "^2.8.0",
     "hyperdrive": "^13.x",
     "hyperswarm": "^4.x",
-    "corestore": "^7.x",
-    "localdrive": "^2.x",
-    "b4a": "^1.x",
-    "graceful-goodbye": "^1.x",
-    "debounceify": "^1.x"
+    "localdrive": "^2.x"
+  },
+  "devDependencies": {
+    "brittle": "^3.19.1",
+    "random-access-memory": "^6.2.1",
+    "testnet": "^1.0.0",
+    "tmp-promise": "^3.0.3"
   }
 }
