@@ -13,7 +13,7 @@
  *   daemon start|stop|status        Manage background daemon
  */
 
-import { SyncEngine, DEFAULT_IGNORES } from '../lib/sync.js'
+import { SyncEngine, DEFAULT_IGNORES } from '../lib/sync-v2.js'
 import * as config from '../lib/config.js'
 import path from 'path'
 import os from 'os'
@@ -213,11 +213,10 @@ async function cmdInit(localPath, flags) {
       await fs.rename(storagePath, actualStoragePath)
     }
     
-    // Save to config
+    // Save to config (v2: all peers are writers, no isWriter flag needed)
     await config.addWorkspace(name, {
       key,
       path: absPath,
-      isWriter: true,
       syncDeletes: flags.delete !== false
     })
     
@@ -306,11 +305,11 @@ async function cmdJoin(key, localPath, flags) {
   try {
     await engine.init()
     
-    // Save to config
+    // Save to config (v2: all peers are writers)
     await config.addWorkspace(name, {
       key,
       path: absPath,
-      isWriter: false,
+      remoteKey: key, // Mark as joined (not created by us)
       syncDeletes: flags.delete !== false
     })
     
@@ -399,15 +398,16 @@ async function cmdWatch(name, flags) {
   // Run in foreground (either --foreground set or daemon not running)
   logInfo(`Watching workspace '${name}'${flags.foreground ? ' (foreground mode)' : ''}`)
   logInfo(`Path: ${workspace.path}`)
-  logInfo(`Mode: ${workspace.isWriter ? 'Writer (local→remote)' : 'Reader (remote→local)'}`)
+  logInfo(`Mode: Bidirectional (v2 multi-writer)`)
 
   const storagePath = config.getStorePath(workspace.key)
   
+  // v2: Use remoteKey if we joined, ownKey if we created
   const engine = new SyncEngine({
     localPath: workspace.path,
     storagePath,
-    remoteKey: workspace.isWriter ? null : workspace.key,
-    ownKey: workspace.isWriter ? workspace.key : null,  // Reopen our own workspace
+    remoteKey: workspace.remoteKey || null,  // Set if we joined
+    ownKey: workspace.remoteKey ? null : workspace.key,  // Set if we created
     syncDeletes: flags.delete !== false && workspace.syncDeletes
   })
   
@@ -422,12 +422,9 @@ async function cmdWatch(name, flags) {
   try {
     await engine.init()
     
-    // Initial sync
-    if (workspace.isWriter) {
-      await engine.syncToRemote()
-    } else {
-      await engine.syncToLocal()
-    }
+    // v2: Bidirectional sync - do both directions
+    await engine.syncToLocal()
+    await engine.syncToRemote()
     
     // Start watching
     await engine.startWatching()
@@ -467,11 +464,12 @@ async function cmdStatus(name, flags) {
   
   const storagePath = config.getStorePath(workspace.key)
   
+  // v2: Use remoteKey if we joined, ownKey if we created
   const engine = new SyncEngine({
     localPath: workspace.path,
     storagePath,
-    remoteKey: workspace.isWriter ? null : workspace.key,
-    ownKey: workspace.isWriter ? workspace.key : null
+    remoteKey: workspace.remoteKey || null,
+    ownKey: workspace.remoteKey ? null : workspace.key
   })
   
   engine.on('error', () => {}) // Suppress errors for status
@@ -489,7 +487,7 @@ async function cmdStatus(name, flags) {
     console.log(`${'─'.repeat(50)}`)
     console.log(`Path:          ${workspace.path}`)
     console.log(`Key:           ${info.key}`)
-    console.log(`Mode:          ${info.isWriter ? 'Writer' : 'Reader'}`)
+    console.log(`Mode:          Bidirectional (v2)`)
     console.log(`Version:       ${info.version}`)
     console.log(`Files:         ${info.fileCount}`)
     console.log(`Total Size:    ${(info.totalSize / 1024).toFixed(1)} KB`)
@@ -525,9 +523,9 @@ async function cmdList(flags) {
   console.log(`${'─'.repeat(70)}`)
   
   for (const ws of workspaces) {
-    const mode = ws.isWriter ? 'writer' : 'reader'
+    const role = ws.remoteKey ? 'joined' : 'created'
     console.log(`${colors.cyan}${ws.name.padEnd(20)}${colors.reset} ${ws.path}`)
-    console.log(`${' '.repeat(20)} ${colors.dim}${mode} | ${ws.key.slice(0, 16)}...${colors.reset}`)
+    console.log(`${' '.repeat(20)} ${colors.dim}${role} | ${ws.key.slice(0, 16)}...${colors.reset}`)
   }
   
   console.log(`${'─'.repeat(70)}`)
