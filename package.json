@@ -7,7 +7,7 @@
     "pearsync": "./bin/pearsync.js"
   },
   "scripts": {
-    "test": "echo \"TODO: add tests\" && exit 0"
+    "test": "brittle test/unit/*.test.js"
   },
   "keywords": [
     "p2p",
